@@ -1,0 +1,125 @@
+(* The below lines are to increase the output length, if this lines were not given then it would make # after certain output printed.*)
+
+System.Control.Print.printLength := 1000;
+System.Control.Print.printDepth := 1000;
+
+(* Defining the datatype for lambda expression with the below 3 constructors. *)
+
+datatype Lambdaexp = V of int
+(*                 | C of int *)
+                   | App of Lambdaexp * Lambdaexp
+                   | Abs of int * Lambdaexp;
+
+(* This function checks is a lambda expersion is in normal form or not, it takes a lambdaexp as input and return a bool value true or false depending up on the lambda expression. *)
+
+fun nf(V x : Lambdaexp) = true 
+  | nf (Abs(x: int , z: Lambdaexp)) = nf(z)
+  | nf (App(Abs(n : int ,x : Lambdaexp), y : Lambdaexp)) = false 
+  | nf (App(x : Lambdaexp, y : Lambdaexp)) = nf(x) andalso nf(y);
+
+(* This function returns the maximum value of the index of the lambda expression, so that it can be used to generate the new variables for alpha conversion. It takes input a lambda expression and returns a int *)
+
+fun lindex (V x : Lambdaexp) = x
+  | lindex (App(x : Lambdaexp, y : Lambdaexp)) = max(lindex(x) , lindex(y))
+  | lindex (Abs(x : int, z : Lambdaexp)) = max(x, lindex(z));
+
+(* This does substitution by taking two ints and a lambda expression another function repar1 is declated below which takes one int and two lambda expressions. *)
+
+fun repar (m :int, n :int, (V x : Lambdaexp)) = if (m = x) then (V n) 
+                                                else (V x)
+  | repar (m :int, n :int, (App(x, y))) = App(repar (m, n, x), repar (m, n, y))
+  | repar (m :int, n :int, (Abs(y:int, z:Lambdaexp))) = if m = y then Abs(y, z)
+                                          else if n = y then 
+                                                 let val u = (lindex(Abs(y, z)) + 1)
+                                                 in Abs(u, repar (m, n, (repar (n, u, z)))) end
+                                               else Abs(y, repar (m, n, z));
+
+(* This union is defined to join two lists *)
+
+fun union (nil, m : int list) = m
+  | union (n : int list, nil) = n
+  | union (n : int list, m : int list) = n @ m;
+
+(* This removedup is created to removed duplicates in a list *)
+
+fun removedup (nil) = nil
+  | removedup (x ::xs) = if (exists(fn y => x = y ) xs) then removedup(xs)
+                         else x :: removedup (xs);
+
+(* This function is created to find the duplicates in a list *)
+
+fun finddup (nil) = nil
+  | finddup (x::xs) = if (exists(fn y => x = y) xs ) then x :: finddup(xs)
+                      else finddup(xs);
+
+(* This function deletes a int from a int list *)
+
+fun delete(a : int, nil) = nil
+  | delete(a : int, x::xs) = if a = x then delete(a,xs)
+                             else x::delete(a,xs); 
+
+(* This function returns a list of free variables index in a given lambda expression. *)
+
+fun fv (V x) = [x]
+  | fv(App(x,y)) = removedup(union(fv(x),fv(y)))
+  | fv(Abs(n,x)) = delete(n,fv(x)); 
+
+(* This function returns a list of bound variables index in a given lambda expression. *)
+
+fun bv (V x) = []
+  | bv (Abs(n,V x)) = [n]
+  | bv (Abs(n,x)) = removedup(union([n],bv(x)))
+  | bv (App(x,y)) = removedup(union(bv(x),bv(y)));
+
+(* This function returns true or false depending by checking a int with the list of free variables *)
+
+fun isfv(m:int, nil) = false
+  | isfv(m:int, x::xs) = if m = x then true
+                         else isfv(m,xs);
+
+(* This function reuturns true or false depending by checking a list of free variables with a list of bound variables *)
+
+fun isfvbv (x::xs , nil) = false
+  | isfvbv (nil, x::xs) = false
+  | isfvbv (nil,nill) = false
+  | isfvbv (x::xs, y::yx) = if (length (finddup(x::xs @ y::yx)) > 0) then true
+                            else false;
+
+(* This is the repar1 function which takes one int and two lambda expression and does the substitution *)
+
+fun repar1 (m :int, x :Lambdaexp, V y :Lambdaexp) = if m = y then x  
+                                                      else V y                                                 
+  | repar1 (m :int, x :Lambdaexp, App(y,z)) = App(repar1(m,x,y),repar1(m,x,z))
+                                             
+  | repar1 (m :int, x :Lambdaexp, Abs(y,z)) = if m = y then Abs(y,z)                                                          
+                                              else Abs(y,repar1(m,x,z));                                 
+
+(* This call_repar function calls the repar and repar1 function by taking the input from the normalization have kept the function cc_repar as mutual recursion so that each function can call each other.*)                 
+                                                                                                      
+fun call_repar (App(Abs(n : int, y : Lambdaexp), V x : Lambdaexp)) =  if nf (repar (n, x, y)) then repar (n ,x , y)
+                                                                      else cc_repar (repar (n , x, y))  
+    | call_repar (App(Abs(n : int, y : Lambdaexp), z : Lambdaexp )) =  if (isfv(n,fv(y))) then 
+                                                             if (isfvbv(fv(z),bv(y))) then
+                                                                let val u1 = (lindex (y) + 1) in                                                               
+                                                                repar1(n,z,repar(hd(finddup(fv(z)@bv(y))),u1,y)) end          
+                                                             else 
+                                                                if nf(repar1(n,z,y)) then repar1(n,z,y)
+                                                                else cc_repar(repar1(n,z,y))
+                                                            else if nf(y) then y 
+                                                                 else cc_repar(y)
+and
+
+cc_repar(Abs(n,x)) = if nf (Abs(n,cc_repar(x))) then Abs(n,cc_repar(x))
+                     else cc_repar(Abs(n,cc_repar(x)))
+  | cc_repar(App(Abs(n,y),z)) = if nf (call_repar(App(Abs(n,y),z))) then call_repar(App(Abs(n,y),z))
+                                else cc_repar(call_repar(App(Abs(n,y),z)))
+  | cc_repar(App(V x,y)) = if nf(App(V x,cc_repar(y))) then App(V x,cc_repar(y))
+                           else cc_repar(App(V x,cc_repar(y)))
+  | cc_repar(App(x,y)) = if nf (App(cc_repar(x),y)) then App(cc_repar(x),y)
+                         else cc_repar(App(cc_repar(x),y));
+
+(* This is the required function it takes the input and checks is it is in normal form if so will return the expression else would call cc_repar for further processing. *)
+
+fun normalize (exp : Lambdaexp) =
+ if nf(exp) then exp
+ else cc_repar(exp);
